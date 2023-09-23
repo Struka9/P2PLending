@@ -71,7 +71,7 @@ contract ZKoreLending is Ownable {
         // TODO: Stake it in some LP
     }
 
-    function payTo(uint256 _debtId, uint256 _amount) external {
+    function pay(uint256 _debtId, uint256 _amount) external {
         // TODO: Receive tokens and cancel debt
     }
 
