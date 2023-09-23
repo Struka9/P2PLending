@@ -25,11 +25,20 @@ contract ZKoreLending is Ownable {
     error ZKoreLending__NotEnoughAllowance();
     error ZKoreLending__InvalidProof();
 
+    // Events
+    event Deposit(address indexed from, address indexed token, uint256 indexed amount);
+    event Withdraw(address indexed from, address indexed token, uint256 indexed amount);
+    event PreApprove(address from, address to, address token, uint256 amount);
+    event Lend(address from, address to, address token, uint256 amount);
+
     // modifiers
     modifier onlyValidToken(address _token) {
         if (!tokenWhitelist[_token]) revert ZKoreLending__NotValidToken();
         _;
     }
+
+    // Only allow orb verified users
+    uint256 internal constant GROUP_ID = 1;
 
     Verifier immutable verifer;
 
@@ -63,22 +72,31 @@ contract ZKoreLending is Ownable {
     }
 
     function deposit(address _token, uint256 _amount) external onlyValidToken(_token) {
-        tokenBalances[_token][msg.sender] += _amount;
-
         // using safe transfer not need to check return value
         ERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);
 
+        tokenBalances[_token][msg.sender] += _amount;
         // TODO: Stake it in some LP
+
+        emit Deposit(msg.sender, _token, _amount);
     }
 
     function pay(uint256 _debtId, uint256 _amount) external {
         // TODO: Receive tokens and cancel debt
     }
 
-    function withdraw(address _token, uint256 _amount) external {}
+    function withdraw(address _token, uint256 _amount) external {
+        tokenBalances[_token][msg.sender] -= _amount;
+        // Using safeTransfer no need to check return value
+        ERC20(_token).safeTransfer(msg.sender, _amount);
+
+        emit Withdraw(msg.sender, _token, _amount);
+    }
 
     function preApprove(address _token, uint256 _amount, address _spender) external onlyValidToken(_token) {
         preApprovals[msg.sender][_spender][_token] = _amount;
+
+        emit PreApprove(msg.sender, _spender, _token, _amount);
     }
 
     function finalizeLoan(
@@ -124,5 +142,7 @@ contract ZKoreLending is Ownable {
 
         debtId = debts.length;
         debts.push(debt);
+
+        emit Lend(_from, msg.sender, _token, _amount);
     }
 }
