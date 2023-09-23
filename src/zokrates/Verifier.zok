@@ -1,0 +1,12 @@
+import "hashes/sha256/512bitPacked" as sha256packed;
+
+const field MINIMUM_CREDIT_SCORE = 90;
+
+def main(private field[2] address, private field creditScore, field[2] digest) -> field[2] {
+    field pad = 0;
+    field[2] h = sha256packed([pad, ...address, creditScore]);
+    assert(creditScore >= MINIMUM_CREDIT_SCORE);
+    assert(h[0] == digest[0]);
+    assert(h[1] == digest[1]);
+    return h;
+}
