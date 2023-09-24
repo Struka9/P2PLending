@@ -3,8 +3,9 @@ pragma solidity ^0.8.21;
 
 import {WorldCoinMock} from "../test/WorldCoinMock.sol";
 import {USDCMock} from "../test/USDCMock.sol";
+import {Script} from "forge-std/Script.sol";
 
-contract HelperConfig {
+contract HelperConfig is Script {
     struct NetworkConfig {
         address worldCoinVerifier;
         address usdc;
@@ -23,7 +24,7 @@ contract HelperConfig {
     function getBaseGoerliConfig() internal pure returns (NetworkConfig memory) {
         return NetworkConfig({
             worldCoinVerifier: address(0x11cA3127182f7583EfC416a8771BD4d11Fae4334),
-            usdc: address(0xF175520C52418dfE19C8098071a252da48Cd1C19)
+            usdc: address(0xFaF20830bCB78590EB1E183fD9cf42758B6c0c81) // address(0xF175520C52418dfE19C8098071a252da48Cd1C19)
         });
     }
 
