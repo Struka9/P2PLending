@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.10;
+pragma solidity ^0.8.21;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -49,7 +49,7 @@ contract ZKoreLending is Ownable {
     // Only allow orb verified users
     uint256 internal constant GROUP_ID = 1;
 
-    Verifier immutable verifer;
+    Verifier immutable zokratesVerifier;
 
     // Approved tokens to use
     mapping(address => bool) tokenWhitelist;
@@ -65,11 +65,11 @@ contract ZKoreLending is Ownable {
 
     IWorldID immutable worldId;
 
-    constructor(address _verifier, address[] memory _tokenWhitelist, address, address _worldId) {
-        if (_verifier == address(0) || _worldId == address(0)) revert ZKoreLending__ZeroAddress();
+    constructor(address _zokratesVerifier, address[] memory _tokenWhitelist, address _worldId) {
+        if (_zokratesVerifier == address(0) || _worldId == address(0)) revert ZKoreLending__ZeroAddress();
 
         worldId = IWorldID(_worldId);
-        verifer = Verifier(_verifier);
+        zokratesVerifier = Verifier(_zokratesVerifier);
 
         EXTERNAL_NULLIFIER = abi.encodePacked(abi.encodePacked(APP_ID).hashToField(), ACTION_NAME).hashToField();
 
@@ -157,7 +157,7 @@ contract ZKoreLending is Ownable {
         worldId.verifyProof(_root, abi.encodePacked(_signal).hashToField(), _nullifierHash, EXTERNAL_NULLIFIER, _proof);
 
         // Check the verifier
-        bool verified = verifer.verifyTx(_zkProof, _input);
+        bool verified = zokratesVerifier.verifyTx(_zkProof, _input);
 
         if (!verified) {
             revert ZKoreLending__InvalidProof();
