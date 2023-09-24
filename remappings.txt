@@ -1,1 +1,2 @@
 @openzeppelin=lib/openzeppelin-contracts/
+@worldid=lib/world-id-contracts/

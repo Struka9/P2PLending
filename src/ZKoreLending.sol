@@ -5,8 +5,11 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Verifier} from "./zokrates/verifier.sol";
+import {IWorldID} from "@worldid/src/interfaces/IWorldID.sol";
+import {ByteHasher} from "./ByteHasher.sol";
 
 contract ZKoreLending is Ownable {
+    using ByteHasher for bytes;
     using SafeERC20 for ERC20;
 
     struct Debt {
@@ -14,7 +17,7 @@ contract ZKoreLending is Ownable {
         address creditor;
         uint256 amount;
         address token;
-        uint256 started;
+        uint256 timestamp;
     }
 
     // Errors
@@ -24,12 +27,14 @@ contract ZKoreLending is Ownable {
     error ZKoreLending__NotEnoughBalance();
     error ZKoreLending__NotEnoughAllowance();
     error ZKoreLending__InvalidProof();
+    error ZKoreLending__InvalidDebtId();
 
     // Events
     event Deposit(address indexed from, address indexed token, uint256 indexed amount);
     event Withdraw(address indexed from, address indexed token, uint256 indexed amount);
     event PreApprove(address from, address to, address token, uint256 amount);
     event Lend(address from, address to, address token, uint256 amount);
+    event PaidDebt(address debtor, address creditor, uint256 debtId);
 
     // modifiers
     modifier onlyValidToken(address _token) {
@@ -37,6 +42,10 @@ contract ZKoreLending is Ownable {
         _;
     }
 
+    // Worldcoin params
+    string constant APP_ID = "app_a176d00c9ad71e10da7ebd9664398c7a";
+    string constant ACTION_NAME = "pro-sumer-human!";
+    uint256 internal immutable EXTERNAL_NULLIFIER;
     // Only allow orb verified users
     uint256 internal constant GROUP_ID = 1;
 
@@ -54,10 +63,15 @@ contract ZKoreLending is Ownable {
     // Debtor => Debtee => Debts
     Debt[] debts;
 
-    constructor(address _verifier, address[] memory _tokenWhitelist) {
-        if (_verifier == address(0)) revert ZKoreLending__ZeroAddress();
+    IWorldID immutable worldId;
 
+    constructor(address _verifier, address[] memory _tokenWhitelist, address, address _worldId) {
+        if (_verifier == address(0) || _worldId == address(0)) revert ZKoreLending__ZeroAddress();
+
+        worldId = IWorldID(_worldId);
         verifer = Verifier(_verifier);
+
+        EXTERNAL_NULLIFIER = abi.encodePacked(abi.encodePacked(APP_ID).hashToField(), ACTION_NAME).hashToField();
 
         uint256 length = _tokenWhitelist.length;
         if (length == 0) revert ZKoreLending__EmptyArray();
@@ -82,7 +96,24 @@ contract ZKoreLending is Ownable {
     }
 
     function pay(uint256 _debtId, uint256 _amount) external {
-        // TODO: Receive tokens and cancel debt
+        if (_debtId >= debts.length) {
+            revert ZKoreLending__InvalidDebtId();
+        }
+
+        Debt memory debt = debts[_debtId];
+
+        if (debt.debtor != msg.sender) {
+            revert ZKoreLending__InvalidDebtId();
+        }
+
+        // No need to check return values
+        ERC20(debt.token).safeTransferFrom(msg.sender, address(this), _amount);
+
+        tokenBalances[debt.token][debt.creditor] += debt.amount;
+
+        delete debts[_debtId];
+
+        emit PaidDebt(debt.debtor, debt.creditor, _debtId);
     }
 
     function withdraw(address _token, uint256 _amount) external {
@@ -104,11 +135,12 @@ contract ZKoreLending is Ownable {
         uint256 _amount,
         address _from,
         // Worldcoin Requirements
-        string calldata _appId,
-        string calldata _actionId,
-        bytes32 _nullifierHash,
+        address _signal,
+        uint256 _root,
+        uint256 _nullifierHash,
+        uint256[8] calldata _proof,
         // ZKProof Requirements
-        Verifier.Proof memory _proof,
+        Verifier.Proof memory _zkProof,
         uint256[4] memory _input
     ) external returns (uint256 debtId) {
         // Check the allowance
@@ -121,10 +153,11 @@ contract ZKoreLending is Ownable {
             revert ZKoreLending__NotEnoughBalance();
         }
 
-        // TODO: Check the world coin contract
+        // WorldID verify
+        worldId.verifyProof(_root, abi.encodePacked(_signal).hashToField(), _nullifierHash, EXTERNAL_NULLIFIER, _proof);
 
         // Check the verifier
-        bool verified = verifer.verifyTx(_proof, _input);
+        bool verified = verifer.verifyTx(_zkProof, _input);
 
         if (!verified) {
             revert ZKoreLending__InvalidProof();
@@ -138,7 +171,7 @@ contract ZKoreLending is Ownable {
         ERC20(_token).safeTransfer(msg.sender, _amount);
 
         Debt memory debt =
-            Debt({debtor: msg.sender, creditor: _from, token: _token, amount: _amount, started: block.timestamp});
+            Debt({debtor: msg.sender, creditor: _from, token: _token, amount: _amount, timestamp: block.timestamp});
 
         debtId = debts.length;
         debts.push(debt);
